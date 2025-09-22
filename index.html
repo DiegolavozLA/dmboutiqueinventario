@@ -142,195 +142,210 @@
     </main>
 
 <script>
-window.onload = () => {
-    // --- ELEMENTOS DEL DOM ---
-    const codeInput = document.getElementById('product-code-input');
-    const addButton = document.getElementById('add-button');
-    const scanButton = document.getElementById('scan-button');
-    const clearButton = document.getElementById('clear-button');
-    const exportButton = document.getElementById('export-button');
-    const searchInput = document.getElementById('search-input');
-    const uniqueCodesEl = document.getElementById('unique-codes');
-    const totalItemsEl = document.getElementById('total-items');
-    const tableBody = document.getElementById('inventory-table-body');
-    const scannerContainer = document.getElementById('scanner-container');
-    const videoEl = document.getElementById('scanner-video');
+    function initializeApp() {
+        // --- ELEMENTOS DEL DOM ---
+        const codeInput = document.getElementById('product-code-input');
+        const addButton = document.getElementById('add-button');
+        const scanButton = document.getElementById('scan-button');
+        const clearButton = document.getElementById('clear-button');
+        const exportButton = document.getElementById('export-button');
+        const searchInput = document.getElementById('search-input');
+        const uniqueCodesEl = document.getElementById('unique-codes');
+        const totalItemsEl = document.getElementById('total-items');
+        const tableBody = document.getElementById('inventory-table-body');
+        const scannerContainer = document.getElementById('scanner-container');
+        const videoEl = document.getElementById('scanner-video');
 
-    // --- ESTADO DE LA APLICACIÓN ---
-    let inventory = new Map();
-    let isScannerActive = false;
-    let codeReader;
+        // --- ESTADO DE LA APLICACIÓN ---
+        let inventory = new Map();
+        let isScannerActive = false;
+        let codeReader;
 
-    // --- Inicialización robusta del escáner ---
-    try {
-        codeReader = new ZXing.BrowserMultiFormatReader();
-    } catch (e) {
-        console.error("Error al inicializar ZXing. La librería no se ha cargado correctamente.", e);
-        alert("No se pudo cargar la funcionalidad de escáner. Revisa tu conexión a internet y asegúrate de no tener bloqueadores de scripts.");
-        scanButton.disabled = true;
-        scanButton.textContent = 'Escáner no disponible';
-        scanButton.style.backgroundColor = 'var(--secondary-color)';
+        // --- Inicialización robusta del escáner ---
+        try {
+            codeReader = new ZXing.BrowserMultiFormatReader();
+        } catch (e) {
+            console.error("Error al inicializar ZXing. La librería no se ha cargado correctamente.", e);
+            scanButton.disabled = true;
+            scanButton.textContent = 'Escáner no disponible';
+            scanButton.style.backgroundColor = 'var(--secondary-color)';
+        }
+
+        // --- FUNCIONES DE DATOS ---
+        const loadInventory = () => {
+            const saved = localStorage.getItem('inventoryData');
+            if (saved) inventory = new Map(JSON.parse(saved));
+        };
+        const saveInventory = () => {
+            localStorage.setItem('inventoryData', JSON.stringify(Array.from(inventory.entries())));
+        };
+
+        // --- FUNCIÓN DE RENDERIZADO PRINCIPAL ---
+        const renderUI = (filter = '') => {
+            tableBody.innerHTML = '';
+            let totalItems = 0;
+            const filterText = filter.toLowerCase();
+            
+            const sortedInventory = new Map([...inventory.entries()].sort());
+
+            for (const [code, count] of sortedInventory) {
+                if (code.toLowerCase().includes(filterText)) {
+                    const row = document.createElement('tr');
+                    row.setAttribute('data-code', code);
+                    row.innerHTML = `
+                        <td>${code}</td>
+                        <td>${count}</td>
+                        <td class="actions-cell">
+                            <button class="action-btn decrease-btn" data-action="decrease" data-code="${code}">-</button>
+                            <button class="action-btn increase-btn" data-action="increase" data-code="${code}">+</button>
+                            <button class="action-btn delete-btn" data-action="delete" data-code="${code}">🗑️</button>
+                        </td>
+                    `;
+                    tableBody.appendChild(row);
+                }
+                totalItems += count;
+            }
+            uniqueCodesEl.textContent = inventory.size;
+            totalItemsEl.textContent = totalItems;
+        };
+
+        const highlightRow = (code) => {
+            const row = tableBody.querySelector(`tr[data-code="${code}"]`);
+            if (row) {
+                row.classList.add('highlight');
+                setTimeout(() => row.classList.remove('highlight'), 1000);
+            }
+        };
+        
+        // --- LÓGICA DE NEGOCIO ---
+        const addProductCode = (code = null) => {
+            const codeToAdd = (code || codeInput.value).trim();
+            if (!codeToAdd) return;
+
+            const currentCount = inventory.get(codeToAdd) || 0;
+            inventory.set(codeToAdd, currentCount + 1);
+
+            saveInventory();
+            renderUI(searchInput.value);
+            highlightRow(codeToAdd);
+            codeInput.value = '';
+            codeInput.focus();
+            if (navigator.vibrate) navigator.vibrate(100);
+        };
+
+        const handleTableAction = (action, code) => {
+            if (!inventory.has(code)) return;
+            
+            let currentCount = inventory.get(code);
+
+            if (action === 'increase') {
+                inventory.set(code, currentCount + 1);
+            } else if (action === 'decrease') {
+                if (currentCount > 1) {
+                    inventory.set(code, currentCount - 1);
+                } else {
+                    inventory.delete(code);
+                }
+            } else if (action === 'delete') {
+                if (confirm(`¿Seguro que quieres eliminar el código "${code}" por completo?`)) {
+                    inventory.delete(code);
+                }
+            }
+            saveInventory();
+            renderUI(searchInput.value);
+        };
+        
+        const exportToCSV = () => {
+            if (inventory.size === 0) {
+                console.log("El inventario está vacío. No hay nada que exportar.");
+                return;
+            }
+            let csvContent = "Codigo,Cantidad\n";
+            inventory.forEach((count, code) => {
+                const codeCsv = `"${code.replace(/"/g, '""')}"`;
+                csvContent += `${codeCsv},${count}\n`;
+            });
+            
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `inventario-${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        const clearInventory = () => {
+            if (confirm('¿Estás seguro de que quieres borrar TODO el inventario?')) {
+                inventory.clear();
+                saveInventory();
+                renderUI();
+            }
+        };
+
+        // --- FUNCIONES DEL ESCÁNER ---
+        const startScanner = () => {
+            isScannerActive = true;
+            scannerContainer.style.display = 'block';
+            scanButton.textContent = 'Detener Escáner';
+            codeReader.decodeFromVideoDevice(undefined, 'scanner-video', (result, err) => {
+                if (result) {
+                    addProductCode(result.getText());
+                }
+                if (err && !(err instanceof ZXing.NotFoundException)) {
+                    console.error(err);
+                    stopScanner();
+                }
+            }).catch(err => {
+                console.error("Error al iniciar la cámara:", err);
+                stopScanner();
+            });
+        };
+        const stopScanner = () => {
+            isScannerActive = false;
+            scannerContainer.style.display = 'none';
+            scanButton.textContent = 'Escanear con Cámara';
+            if(codeReader) {
+                codeReader.reset();
+            }
+        };
+
+        // --- EVENT LISTENERS ---
+        addButton.addEventListener('click', () => addProductCode());
+        codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addProductCode(); }});
+        scanButton.addEventListener('click', () => {
+            if (!codeReader) return; // No hacer nada si el lector no se inicializó
+            isScannerActive ? stopScanner() : startScanner();
+        });
+        tableBody.addEventListener('click', (e) => {
+            const target = e.target.closest('.action-btn');
+            if (target) handleTableAction(target.dataset.action, target.dataset.code);
+        });
+        searchInput.addEventListener('input', () => renderUI(searchInput.value));
+        exportButton.addEventListener('click', exportToCSV);
+        clearButton.addEventListener('click', clearInventory);
+
+        // --- INICIALIZACIÓN ---
+        loadInventory();
+        renderUI();
     }
 
-    // --- FUNCIONES DE DATOS ---
-    const loadInventory = () => {
-        const saved = localStorage.getItem('inventoryData');
-        if (saved) inventory = new Map(JSON.parse(saved));
-    };
-    const saveInventory = () => {
-        localStorage.setItem('inventoryData', JSON.stringify(Array.from(inventory.entries())));
-    };
-
-    // --- FUNCIÓN DE RENDERIZADO PRINCIPAL ---
-    const renderUI = (filter = '') => {
-        tableBody.innerHTML = '';
-        let totalItems = 0;
-        const filterText = filter.toLowerCase();
-        
-        const sortedInventory = new Map([...inventory.entries()].sort());
-
-        for (const [code, count] of sortedInventory) {
-            if (code.toLowerCase().includes(filterText)) {
-                const row = document.createElement('tr');
-                row.setAttribute('data-code', code);
-                row.innerHTML = `
-                    <td>${code}</td>
-                    <td>${count}</td>
-                    <td class="actions-cell">
-                        <button class="action-btn decrease-btn" data-action="decrease" data-code="${code}">-</button>
-                        <button class="action-btn increase-btn" data-action="increase" data-code="${code}">+</button>
-                        <button class="action-btn delete-btn" data-action="delete" data-code="${code}">🗑️</button>
-                    </td>
-                `;
-                tableBody.appendChild(row);
-            }
-            totalItems += count;
+    // --- VERIFICADOR DE LIBRERÍA ---
+    function checkLibraryAndRun() {
+        if (typeof ZXing !== 'undefined') {
+            // La librería está cargada, ¡ejecutar la app!
+            initializeApp();
+        } else {
+            // Aún no está lista, volver a verificar en 100ms
+            setTimeout(checkLibraryAndRun, 100);
         }
-        uniqueCodesEl.textContent = inventory.size;
-        totalItemsEl.textContent = totalItems;
-    };
+    }
 
-    const highlightRow = (code) => {
-        const row = tableBody.querySelector(`tr[data-code="${code}"]`);
-        if (row) {
-            row.classList.add('highlight');
-            setTimeout(() => row.classList.remove('highlight'), 1000);
-        }
-    };
-    
-    // --- LÓGICA DE NEGOCIO ---
-    const addProductCode = (code = null) => {
-        const codeToAdd = (code || codeInput.value).trim();
-        if (!codeToAdd) return;
+    // Iniciar el verificador
+    checkLibraryAndRun();
 
-        const currentCount = inventory.get(codeToAdd) || 0;
-        inventory.set(codeToAdd, currentCount + 1);
-
-        saveInventory();
-        renderUI(searchInput.value);
-        highlightRow(codeToAdd);
-        codeInput.value = '';
-        codeInput.focus();
-        if (navigator.vibrate) navigator.vibrate(100);
-    };
-
-    const handleTableAction = (action, code) => {
-        if (!inventory.has(code)) return;
-        
-        let currentCount = inventory.get(code);
-
-        if (action === 'increase') {
-            inventory.set(code, currentCount + 1);
-        } else if (action === 'decrease') {
-            if (currentCount > 1) {
-                inventory.set(code, currentCount - 1);
-            } else {
-                inventory.delete(code);
-            }
-        } else if (action === 'delete') {
-            if (confirm(`¿Seguro que quieres eliminar el código "${code}" por completo?`)) {
-                inventory.delete(code);
-            }
-        }
-        saveInventory();
-        renderUI(searchInput.value);
-    };
-    
-    const exportToCSV = () => {
-        if (inventory.size === 0) {
-            alert("El inventario está vacío. No hay nada que exportar.");
-            return;
-        }
-        let csvContent = "Codigo,Cantidad\n";
-        inventory.forEach((count, code) => {
-            const codeCsv = `"${code.replace(/"/g, '""')}"`;
-            csvContent += `${codeCsv},${count}\n`;
-        });
-        
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `inventario-${new Date().toISOString().split('T')[0]}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
-
-    const clearInventory = () => {
-        if (confirm('¿Estás seguro de que quieres borrar TODO el inventario?')) {
-            inventory.clear();
-            saveInventory();
-            renderUI();
-        }
-    };
-
-    // --- FUNCIONES DEL ESCÁNER ---
-    const startScanner = () => {
-        isScannerActive = true;
-        scannerContainer.style.display = 'block';
-        scanButton.textContent = 'Detener Escáner';
-        codeReader.decodeFromVideoDevice(undefined, 'scanner-video', (result, err) => {
-            if (result) {
-                addProductCode(result.getText());
-            }
-            if (err && !(err instanceof ZXing.NotFoundException)) {
-                console.error(err);
-                stopScanner();
-            }
-        }).catch(err => {
-            console.error("Error al iniciar la cámara:", err);
-            alert("No se pudo acceder a la cámara. Por favor, otorga los permisos.");
-            stopScanner();
-        });
-    };
-    const stopScanner = () => {
-        isScannerActive = false;
-        scannerContainer.style.display = 'none';
-        scanButton.textContent = 'Escanear con Cámara';
-        codeReader.reset();
-    };
-
-    // --- EVENT LISTENERS ---
-    addButton.addEventListener('click', () => addProductCode());
-    codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addProductCode(); }});
-    scanButton.addEventListener('click', () => {
-        if (!codeReader) return; // No hacer nada si el lector no se inicializó
-        isScannerActive ? stopScanner() : startScanner();
-    });
-    tableBody.addEventListener('click', (e) => {
-        const target = e.target.closest('.action-btn');
-        if (target) handleTableAction(target.dataset.action, target.dataset.code);
-    });
-    searchInput.addEventListener('input', () => renderUI(searchInput.value));
-    exportButton.addEventListener('click', exportToCSV);
-    clearButton.addEventListener('click', clearInventory);
-
-    // --- INICIALIZACIÓN ---
-    loadInventory();
-    renderUI();
-};
 </script>
 </body>
 </html>
