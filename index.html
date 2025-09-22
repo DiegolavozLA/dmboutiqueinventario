@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestor de Inventario Pro</title>
-    <!-- Librería para escanear códigos de barra -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@zxing/library@latest/umd/zxing.min.js"></script>
     <style>
         :root {
@@ -25,9 +24,7 @@
             --highlight-color: #d1ecf1;
             --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
-
         * { margin: 0; padding: 0; box-sizing: border-box; }
-
         body {
             font-family: var(--font-family);
             background-color: var(--background-color);
@@ -35,7 +32,6 @@
             font-size: 16px;
             line-height: 1.5;
         }
-
         .container {
             display: flex;
             flex-direction: column;
@@ -44,14 +40,12 @@
             padding: 1rem;
             gap: 1.5rem;
         }
-
         h1 { text-align: center; color: var(--primary-color); font-size: 2rem; }
         .card { background-color: var(--white-color); border-radius: 8px; padding: 1.25rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
         .summary { display: flex; justify-content: space-around; text-align: center; }
         .summary-item .label { font-size: 0.9rem; color: var(--secondary-color); }
         .summary-item .value { font-size: 1.75rem; font-weight: bold; color: var(--primary-color); }
         .input-section, .actions-section { display: flex; flex-direction: column; gap: 0.75rem; }
-
         #product-code-input, #search-input {
             width: 100%;
             padding: 0.75rem 1rem;
@@ -63,7 +57,6 @@
         }
         #product-code-input:focus, #search-input:focus { outline: none; border-color: var(--primary-color); }
         #search-input { margin-bottom: 1rem; }
-
         .btn { border: none; border-radius: 8px; padding: 0.75rem 1rem; font-size: 1.1rem; font-weight: bold; cursor: pointer; min-height: 48px; transition: background-color 0.2s, opacity 0.2s; }
         .btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-primary { background-color: var(--primary-color); color: var(--white-color); }
@@ -72,17 +65,14 @@
         .btn-secondary:active { background-color: var(--secondary-active); }
         .btn-success { background-color: var(--success-color); color: var(--white-color); }
         .btn-success:active { background-color: var(--success-active); }
-
-        #scanner-container { display: none; margin-top: 1rem; border-radius: 8px; overflow: hidden; }
+        #scanner-container { display: none; margin-top: 1rem; border-radius: 8px; overflow: hidden; position: relative; }
         #scanner-video { width: 100%; height: auto; display: block; }
-
         #inventory-table { width: 100%; border-collapse: collapse; }
         #inventory-table th, #inventory-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
         #inventory-table th { background-color: #e9ecef; }
         #inventory-table td:nth-child(1) { word-break: break-all; }
         #inventory-table td:nth-child(2) { text-align: center; font-weight: bold; font-size: 1.2rem; }
         #inventory-table td:nth-child(3) { text-align: center; }
-
         .actions-cell { display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap; }
         .action-btn { font-size: 1rem; width: 36px; height: 36px; border-radius: 50%; border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; }
         .decrease-btn { background-color: var(--warning-color); }
@@ -91,7 +81,6 @@
         .increase-btn:active { background-color: var(--primary-active); }
         .delete-btn { background-color: var(--danger-color); font-size: 1.2rem; }
         .delete-btn:active { background-color: var(--danger-active); }
-
         @keyframes highlight-animation { from { background-color: var(--highlight-color); } to { background-color: transparent; } }
         .highlight { animation: highlight-animation 1s ease-out; }
     </style>
@@ -185,7 +174,6 @@
             tableBody.innerHTML = '';
             let totalItems = 0;
             const filterText = filter.toLowerCase();
-            
             const sortedInventory = new Map([...inventory.entries()].sort());
 
             for (const [code, count] of sortedInventory) {
@@ -257,7 +245,7 @@
         
         const exportToCSV = () => {
             if (inventory.size === 0) {
-                console.log("El inventario está vacío. No hay nada que exportar.");
+                alert("El inventario está vacío. No hay nada que exportar.");
                 return;
             }
             let csvContent = "Codigo,Cantidad\n";
@@ -285,30 +273,38 @@
             }
         };
 
-        // --- FUNCIONES DEL ESCÁNER ---
-        const startScanner = () => {
+        // --- FUNCIONES DEL ESCÁNER (VERSIÓN MEJORADA) ---
+        const startScanner = async () => {
             isScannerActive = true;
             scannerContainer.style.display = 'block';
             scanButton.textContent = 'Detener Escáner';
-            codeReader.decodeFromVideoDevice(undefined, 'scanner-video', (result, err) => {
-                if (result) {
-                    addProductCode(result.getText());
-                }
-                if (err && !(err instanceof ZXing.NotFoundException)) {
-                    console.error(err);
-                    stopScanner();
-                }
-            }).catch(err => {
-                console.error("Error al iniciar la cámara:", err);
-                stopScanner();
-            });
+            
+            try {
+                // Pide permiso y comienza a decodificar desde el stream de video
+                codeReader.decodeFromVideoDevice(undefined, 'scanner-video', (result, err) => {
+                    if (result) {
+                        // Un código fue detectado
+                        addProductCode(result.getText());
+                    }
+                    // No se necesita manejar el error 'NotFoundException' aquí, es normal
+                    if (err && !(err instanceof ZXing.NotFoundException)) {
+                        console.error('Error de decodificación:', err);
+                    }
+                });
+            } catch (err) {
+                // Maneja errores al solicitar el permiso de la cámara
+                console.error('Error al iniciar la cámara:', err);
+                alert(`Error al iniciar la cámara: ${err.name}. Asegúrate de haber dado permisos y de estar en un sitio HTTPS.`);
+                stopScanner(); // Revierte el estado si falla el inicio
+            }
         };
+
         const stopScanner = () => {
             isScannerActive = false;
             scannerContainer.style.display = 'none';
             scanButton.textContent = 'Escanear con Cámara';
-            if(codeReader) {
-                codeReader.reset();
+            if (codeReader) {
+                codeReader.reset(); // Detiene el escáner y libera la cámara
             }
         };
 
@@ -316,7 +312,7 @@
         addButton.addEventListener('click', () => addProductCode());
         codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addProductCode(); }});
         scanButton.addEventListener('click', () => {
-            if (!codeReader) return; // No hacer nada si el lector no se inicializó
+            if (!codeReader) return;
             isScannerActive ? stopScanner() : startScanner();
         });
         tableBody.addEventListener('click', (e) => {
@@ -335,10 +331,8 @@
     // --- VERIFICADOR DE LIBRERÍA ---
     function checkLibraryAndRun() {
         if (typeof ZXing !== 'undefined') {
-            // La librería está cargada, ¡ejecutar la app!
             initializeApp();
         } else {
-            // Aún no está lista, volver a verificar en 100ms
             setTimeout(checkLibraryAndRun, 100);
         }
     }
@@ -349,4 +343,3 @@
 </script>
 </body>
 </html>
-
