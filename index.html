@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Inventario Pro</title>
+    <!-- Librería para escanear códigos de barra -->
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@zxing/library@latest/umd/zxing.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #007bff;
+            --primary-active: #0056b3;
+            --secondary-color: #6c757d;
+            --secondary-active: #545b62;
+            --success-color: #28a745;
+            --success-active: #218838;
+            --danger-color: #dc3545;
+            --danger-active: #c82333;
+            --warning-color: #ffc107;
+            --warning-active: #e0a800;
+            --background-color: #f8f9fa;
+            --text-color: #212529;
+            --white-color: #ffffff;
+            --border-color: #dee2e6;
+            --highlight-color: #d1ecf1;
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--background-color);
+            color: var(--text-color);
+            font-size: 16px;
+            line-height: 1.5;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 1rem;
+            gap: 1.5rem;
+        }
+
+        h1 { text-align: center; color: var(--primary-color); font-size: 2rem; }
+        .card { background-color: var(--white-color); border-radius: 8px; padding: 1.25rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .summary { display: flex; justify-content: space-around; text-align: center; }
+        .summary-item .label { font-size: 0.9rem; color: var(--secondary-color); }
+        .summary-item .value { font-size: 1.75rem; font-weight: bold; color: var(--primary-color); }
+        .input-section, .actions-section { display: flex; flex-direction: column; gap: 0.75rem; }
+
+        #product-code-input, #search-input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            font-size: 1.1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            min-height: 48px;
+            transition: border-color 0.2s;
+        }
+        #product-code-input:focus, #search-input:focus { outline: none; border-color: var(--primary-color); }
+        #search-input { margin-bottom: 1rem; }
+
+        .btn { border: none; border-radius: 8px; padding: 0.75rem 1rem; font-size: 1.1rem; font-weight: bold; cursor: pointer; min-height: 48px; transition: background-color 0.2s, opacity 0.2s; }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-primary { background-color: var(--primary-color); color: var(--white-color); }
+        .btn-primary:active { background-color: var(--primary-active); }
+        .btn-secondary { background-color: var(--secondary-color); color: var(--white-color); }
+        .btn-secondary:active { background-color: var(--secondary-active); }
+        .btn-success { background-color: var(--success-color); color: var(--white-color); }
+        .btn-success:active { background-color: var(--success-active); }
+
+        #scanner-container { display: none; margin-top: 1rem; border-radius: 8px; overflow: hidden; }
+        #scanner-video { width: 100%; height: auto; display: block; }
+
+        #inventory-table { width: 100%; border-collapse: collapse; }
+        #inventory-table th, #inventory-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+        #inventory-table th { background-color: #e9ecef; }
+        #inventory-table td:nth-child(1) { word-break: break-all; }
+        #inventory-table td:nth-child(2) { text-align: center; font-weight: bold; font-size: 1.2rem; }
+        #inventory-table td:nth-child(3) { text-align: center; }
+
+        .actions-cell { display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap; }
+        .action-btn { font-size: 1rem; width: 36px; height: 36px; border-radius: 50%; border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .decrease-btn { background-color: var(--warning-color); }
+        .decrease-btn:active { background-color: var(--warning-active); }
+        .increase-btn { background-color: var(--primary-color); }
+        .increase-btn:active { background-color: var(--primary-active); }
+        .delete-btn { background-color: var(--danger-color); font-size: 1.2rem; }
+        .delete-btn:active { background-color: var(--danger-active); }
+
+        @keyframes highlight-animation { from { background-color: var(--highlight-color); } to { background-color: transparent; } }
+        .highlight { animation: highlight-animation 1s ease-out; }
+    </style>
+</head>
+<body>
+
+    <main class="container">
+        <h1>Gestor de Inventario Pro</h1>
+
+        <section class="summary card">
+            <div class="summary-item">
+                <span id="unique-codes" class="value">0</span>
+                <span class="label">Códigos Únicos</span>
+            </div>
+            <div class="summary-item">
+                <span id="total-items" class="value">0</span>
+                <span class="label">Total de Items</span>
+            </div>
+        </section>
+
+        <section class="input-section card">
+            <input type="text" id="product-code-input" placeholder="Escribir o escanear código..." autofocus>
+            <button id="add-button" class="btn btn-primary">Agregar Manualmente</button>
+            <button id="scan-button" class="btn btn-success">Escanear con Cámara</button>
+            <div id="scanner-container"><video id="scanner-video"></video></div>
+        </section>
+
+        <section class="results-section card">
+            <input type="text" id="search-input" placeholder="🔍 Buscar código en el inventario...">
+            <div style="overflow-x:auto;">
+                <table id="inventory-table">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Cantidad</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventory-table-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="actions-section">
+            <button id="export-button" class="btn btn-primary">Exportar a CSV</button>
+            <button id="clear-button" class="btn btn-secondary">Limpiar Inventario</button>
+        </section>
+    </main>
+
+<script>
+window.onload = () => {
+    // --- ELEMENTOS DEL DOM ---
+    const codeInput = document.getElementById('product-code-input');
+    const addButton = document.getElementById('add-button');
+    const scanButton = document.getElementById('scan-button');
+    const clearButton = document.getElementById('clear-button');
+    const exportButton = document.getElementById('export-button');
+    const searchInput = document.getElementById('search-input');
+    const uniqueCodesEl = document.getElementById('unique-codes');
+    const totalItemsEl = document.getElementById('total-items');
+    const tableBody = document.getElementById('inventory-table-body');
+    const scannerContainer = document.getElementById('scanner-container');
+    const videoEl = document.getElementById('scanner-video');
+
+    // --- ESTADO DE LA APLICACIÓN ---
+    let inventory = new Map();
+    let isScannerActive = false;
+    let codeReader;
+
+    // --- Inicialización robusta del escáner ---
+    try {
+        codeReader = new ZXing.BrowserMultiFormatReader();
+    } catch (e) {
+        console.error("Error al inicializar ZXing. La librería no se ha cargado correctamente.", e);
+        alert("No se pudo cargar la funcionalidad de escáner. Revisa tu conexión a internet y asegúrate de no tener bloqueadores de scripts.");
+        scanButton.disabled = true;
+        scanButton.textContent = 'Escáner no disponible';
+        scanButton.style.backgroundColor = 'var(--secondary-color)';
+    }
+
+    // --- FUNCIONES DE DATOS ---
+    const loadInventory = () => {
+        const saved = localStorage.getItem('inventoryData');
+        if (saved) inventory = new Map(JSON.parse(saved));
+    };
+    const saveInventory = () => {
+        localStorage.setItem('inventoryData', JSON.stringify(Array.from(inventory.entries())));
+    };
+
+    // --- FUNCIÓN DE RENDERIZADO PRINCIPAL ---
+    const renderUI = (filter = '') => {
+        tableBody.innerHTML = '';
+        let totalItems = 0;
+        const filterText = filter.toLowerCase();
+        
+        const sortedInventory = new Map([...inventory.entries()].sort());
+
+        for (const [code, count] of sortedInventory) {
+            if (code.toLowerCase().includes(filterText)) {
+                const row = document.createElement('tr');
+                row.setAttribute('data-code', code);
+                row.innerHTML = `
+                    <td>${code}</td>
+                    <td>${count}</td>
+                    <td class="actions-cell">
+                        <button class="action-btn decrease-btn" data-action="decrease" data-code="${code}">-</button>
+                        <button class="action-btn increase-btn" data-action="increase" data-code="${code}">+</button>
+                        <button class="action-btn delete-btn" data-action="delete" data-code="${code}">🗑️</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            }
+            totalItems += count;
+        }
+        uniqueCodesEl.textContent = inventory.size;
+        totalItemsEl.textContent = totalItems;
+    };
+
+    const highlightRow = (code) => {
+        const row = tableBody.querySelector(`tr[data-code="${code}"]`);
+        if (row) {
+            row.classList.add('highlight');
+            setTimeout(() => row.classList.remove('highlight'), 1000);
+        }
+    };
+    
+    // --- LÓGICA DE NEGOCIO ---
+    const addProductCode = (code = null) => {
+        const codeToAdd = (code || codeInput.value).trim();
+        if (!codeToAdd) return;
+
+        const currentCount = inventory.get(codeToAdd) || 0;
+        inventory.set(codeToAdd, currentCount + 1);
+
+        saveInventory();
+        renderUI(searchInput.value);
+        highlightRow(codeToAdd);
+        codeInput.value = '';
+        codeInput.focus();
+        if (navigator.vibrate) navigator.vibrate(100);
+    };
+
+    const handleTableAction = (action, code) => {
+        if (!inventory.has(code)) return;
+        
+        let currentCount = inventory.get(code);
+
+        if (action === 'increase') {
+            inventory.set(code, currentCount + 1);
+        } else if (action === 'decrease') {
+            if (currentCount > 1) {
+                inventory.set(code, currentCount - 1);
+            } else {
+                inventory.delete(code);
+            }
+        } else if (action === 'delete') {
+            if (confirm(`¿Seguro que quieres eliminar el código "${code}" por completo?`)) {
+                inventory.delete(code);
+            }
+        }
+        saveInventory();
+        renderUI(searchInput.value);
+    };
+    
+    const exportToCSV = () => {
+        if (inventory.size === 0) {
+            alert("El inventario está vacío. No hay nada que exportar.");
+            return;
+        }
+        let csvContent = "Codigo,Cantidad\n";
+        inventory.forEach((count, code) => {
+            const codeCsv = `"${code.replace(/"/g, '""')}"`;
+            csvContent += `${codeCsv},${count}\n`;
+        });
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", `inventario-${new Date().toISOString().split('T')[0]}.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const clearInventory = () => {
+        if (confirm('¿Estás seguro de que quieres borrar TODO el inventario?')) {
+            inventory.clear();
+            saveInventory();
+            renderUI();
+        }
+    };
+
+    // --- FUNCIONES DEL ESCÁNER ---
+    const startScanner = () => {
+        isScannerActive = true;
+        scannerContainer.style.display = 'block';
+        scanButton.textContent = 'Detener Escáner';
+        codeReader.decodeFromVideoDevice(undefined, 'scanner-video', (result, err) => {
+            if (result) {
+                addProductCode(result.getText());
+            }
+            if (err && !(err instanceof ZXing.NotFoundException)) {
+                console.error(err);
+                stopScanner();
+            }
+        }).catch(err => {
+            console.error("Error al iniciar la cámara:", err);
+            alert("No se pudo acceder a la cámara. Por favor, otorga los permisos.");
+            stopScanner();
+        });
+    };
+    const stopScanner = () => {
+        isScannerActive = false;
+        scannerContainer.style.display = 'none';
+        scanButton.textContent = 'Escanear con Cámara';
+        codeReader.reset();
+    };
+
+    // --- EVENT LISTENERS ---
+    addButton.addEventListener('click', () => addProductCode());
+    codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addProductCode(); }});
+    scanButton.addEventListener('click', () => {
+        if (!codeReader) return; // No hacer nada si el lector no se inicializó
+        isScannerActive ? stopScanner() : startScanner();
+    });
+    tableBody.addEventListener('click', (e) => {
+        const target = e.target.closest('.action-btn');
+        if (target) handleTableAction(target.dataset.action, target.dataset.code);
+    });
+    searchInput.addEventListener('input', () => renderUI(searchInput.value));
+    exportButton.addEventListener('click', exportToCSV);
+    clearButton.addEventListener('click', clearInventory);
+
+    // --- INICIALIZACIÓN ---
+    loadInventory();
+    renderUI();
+};
+</script>
+</body>
+</html>
+
