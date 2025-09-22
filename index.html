@@ -4,19 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestor de Inventario Pro</title>
+    <!-- Librería para escanear códigos de barra -->
     <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@zxing/library@latest/umd/zxing.min.js"></script>
     <style>
         :root {
-            --primary-color: #007bff;
-            --primary-active: #0056b3;
+            --primary-color: #0d6efd;
+            --primary-active: #0b5ed7;
             --secondary-color: #6c757d;
-            --secondary-active: #545b62;
-            --success-color: #28a745;
-            --success-active: #218838;
+            --secondary-active: #5c636a;
+            --success-color: #198754;
+            --success-active: #157347;
             --danger-color: #dc3545;
-            --danger-active: #c82333;
+            --danger-active: #bb2d3b;
             --warning-color: #ffc107;
-            --warning-active: #e0a800;
+            --warning-active: #ffae00;
             --background-color: #f8f9fa;
             --text-color: #212529;
             --white-color: #ffffff;
@@ -24,7 +25,9 @@
             --highlight-color: #d1ecf1;
             --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
+
         body {
             font-family: var(--font-family);
             background-color: var(--background-color);
@@ -32,6 +35,7 @@
             font-size: 16px;
             line-height: 1.5;
         }
+
         .container {
             display: flex;
             flex-direction: column;
@@ -40,12 +44,14 @@
             padding: 1rem;
             gap: 1.5rem;
         }
+
         h1 { text-align: center; color: var(--primary-color); font-size: 2rem; }
         .card { background-color: var(--white-color); border-radius: 8px; padding: 1.25rem; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
         .summary { display: flex; justify-content: space-around; text-align: center; }
         .summary-item .label { font-size: 0.9rem; color: var(--secondary-color); }
         .summary-item .value { font-size: 1.75rem; font-weight: bold; color: var(--primary-color); }
         .input-section, .actions-section { display: flex; flex-direction: column; gap: 0.75rem; }
+
         #product-code-input, #search-input {
             width: 100%;
             padding: 0.75rem 1rem;
@@ -57,6 +63,7 @@
         }
         #product-code-input:focus, #search-input:focus { outline: none; border-color: var(--primary-color); }
         #search-input { margin-bottom: 1rem; }
+
         .btn { border: none; border-radius: 8px; padding: 0.75rem 1rem; font-size: 1.1rem; font-weight: bold; cursor: pointer; min-height: 48px; transition: background-color 0.2s, opacity 0.2s; }
         .btn:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-primary { background-color: var(--primary-color); color: var(--white-color); }
@@ -65,14 +72,18 @@
         .btn-secondary:active { background-color: var(--secondary-active); }
         .btn-success { background-color: var(--success-color); color: var(--white-color); }
         .btn-success:active { background-color: var(--success-active); }
-        #scanner-container { display: none; margin-top: 1rem; border-radius: 8px; overflow: hidden; position: relative; }
+
+        #scanner-container { display: none; margin-top: 1rem; border-radius: 8px; overflow: hidden; border: 2px solid var(--border-color); }
         #scanner-video { width: 100%; height: auto; display: block; }
+        #error-log { color: var(--danger-color); font-weight: bold; text-align: center; margin-top: 0.5rem; min-height: 1.5em; }
+
         #inventory-table { width: 100%; border-collapse: collapse; }
         #inventory-table th, #inventory-table td { padding: 0.75rem; text-align: left; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
         #inventory-table th { background-color: #e9ecef; }
         #inventory-table td:nth-child(1) { word-break: break-all; }
         #inventory-table td:nth-child(2) { text-align: center; font-weight: bold; font-size: 1.2rem; }
         #inventory-table td:nth-child(3) { text-align: center; }
+
         .actions-cell { display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap; }
         .action-btn { font-size: 1rem; width: 36px; height: 36px; border-radius: 50%; border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; }
         .decrease-btn { background-color: var(--warning-color); }
@@ -81,8 +92,48 @@
         .increase-btn:active { background-color: var(--primary-active); }
         .delete-btn { background-color: var(--danger-color); font-size: 1.2rem; }
         .delete-btn:active { background-color: var(--danger-active); }
+
         @keyframes highlight-animation { from { background-color: var(--highlight-color); } to { background-color: transparent; } }
         .highlight { animation: highlight-animation 1s ease-out; }
+
+        /* Estilos para el modal de confirmación */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        .modal-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background-color: var(--white-color);
+            padding: 1.5rem;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .modal-message {
+            margin-bottom: 1.5rem;
+            font-size: 1.1rem;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+        }
     </style>
 </head>
 <body>
@@ -105,7 +156,8 @@
             <input type="text" id="product-code-input" placeholder="Escribir o escanear código..." autofocus>
             <button id="add-button" class="btn btn-primary">Agregar Manualmente</button>
             <button id="scan-button" class="btn btn-success">Escanear con Cámara</button>
-            <div id="scanner-container"><video id="scanner-video"></video></div>
+            <div id="scanner-container"><video id="scanner-video" playsinline></video></div>
+            <p id="error-log"></p>
         </section>
 
         <section class="results-section card">
@@ -130,6 +182,17 @@
         </section>
     </main>
 
+    <!-- Modal de Confirmación -->
+    <div id="confirmation-modal" class="modal-overlay">
+        <div class="modal-content">
+            <p id="modal-message" class="modal-message"></p>
+            <div class="modal-actions">
+                <button id="modal-confirm-btn" class="btn btn-danger">Sí, continuar</button>
+                <button id="modal-cancel-btn" class="btn btn-secondary">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
 <script>
     function initializeApp() {
         // --- ELEMENTOS DEL DOM ---
@@ -144,21 +207,53 @@
         const tableBody = document.getElementById('inventory-table-body');
         const scannerContainer = document.getElementById('scanner-container');
         const videoEl = document.getElementById('scanner-video');
+        const errorLog = document.getElementById('error-log');
+        const modal = document.getElementById('confirmation-modal');
+        const modalMessage = document.getElementById('modal-message');
+        const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
 
         // --- ESTADO DE LA APLICACIÓN ---
         let inventory = new Map();
         let isScannerActive = false;
         let codeReader;
+        let confirmCallback = null;
 
         // --- Inicialización robusta del escáner ---
         try {
             codeReader = new ZXing.BrowserMultiFormatReader();
         } catch (e) {
-            console.error("Error al inicializar ZXing. La librería no se ha cargado correctamente.", e);
+            console.error("Error al inicializar ZXing:", e);
             scanButton.disabled = true;
             scanButton.textContent = 'Escáner no disponible';
-            scanButton.style.backgroundColor = 'var(--secondary-color)';
+            errorLog.textContent = 'No se pudo cargar la librería de escaneo.';
         }
+
+        // --- FUNCIONES DEL MODAL ---
+        const showConfirmationModal = (message, onConfirm) => {
+            modalMessage.textContent = message;
+            confirmCallback = onConfirm;
+            modal.classList.add('visible');
+        };
+
+        const hideConfirmationModal = () => {
+            modal.classList.remove('visible');
+            confirmCallback = null;
+        };
+
+        modalConfirmBtn.addEventListener('click', () => {
+            if (confirmCallback) {
+                confirmCallback();
+            }
+            hideConfirmationModal();
+        });
+
+        modalCancelBtn.addEventListener('click', hideConfirmationModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                hideConfirmationModal();
+            }
+        });
 
         // --- FUNCIONES DE DATOS ---
         const loadInventory = () => {
@@ -200,6 +295,7 @@
         const highlightRow = (code) => {
             const row = tableBody.querySelector(`tr[data-code="${code}"]`);
             if (row) {
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 row.classList.add('highlight');
                 setTimeout(() => row.classList.remove('highlight'), 1000);
             }
@@ -235,9 +331,12 @@
                     inventory.delete(code);
                 }
             } else if (action === 'delete') {
-                if (confirm(`¿Seguro que quieres eliminar el código "${code}" por completo?`)) {
+                showConfirmationModal(`¿Seguro que quieres eliminar el código "${code}" por completo?`, () => {
                     inventory.delete(code);
-                }
+                    saveInventory();
+                    renderUI(searchInput.value);
+                });
+                return; // Evita el guardado y renderizado duplicado
             }
             saveInventory();
             renderUI(searchInput.value);
@@ -245,7 +344,8 @@
         
         const exportToCSV = () => {
             if (inventory.size === 0) {
-                alert("El inventario está vacío. No hay nada que exportar.");
+                errorLog.textContent = "El inventario está vacío.";
+                setTimeout(() => errorLog.textContent = "", 2000);
                 return;
             }
             let csvContent = "Codigo,Cantidad\n";
@@ -259,44 +359,47 @@
             const url = URL.createObjectURL(blob);
             link.setAttribute("href", url);
             link.setAttribute("download", `inventario-${new Date().toISOString().split('T')[0]}.csv`);
-            link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         };
 
         const clearInventory = () => {
-            if (confirm('¿Estás seguro de que quieres borrar TODO el inventario?')) {
+            showConfirmationModal('¿Estás seguro de que quieres borrar TODO el inventario?', () => {
                 inventory.clear();
                 saveInventory();
                 renderUI();
-            }
+            });
         };
 
-        // --- FUNCIONES DEL ESCÁNER (VERSIÓN MEJORADA) ---
-        const startScanner = async () => {
+        // --- FUNCIONES DEL ESCÁNER ---
+        const startScanner = () => {
             isScannerActive = true;
             scannerContainer.style.display = 'block';
             scanButton.textContent = 'Detener Escáner';
-            
-            try {
-                // Pide permiso y comienza a decodificar desde el stream de video
-                codeReader.decodeFromVideoDevice(undefined, 'scanner-video', (result, err) => {
-                    if (result) {
-                        // Un código fue detectado
-                        addProductCode(result.getText());
-                    }
-                    // No se necesita manejar el error 'NotFoundException' aquí, es normal
-                    if (err && !(err instanceof ZXing.NotFoundException)) {
-                        console.error('Error de decodificación:', err);
-                    }
-                });
-            } catch (err) {
-                // Maneja errores al solicitar el permiso de la cámara
-                console.error('Error al iniciar la cámara:', err);
-                alert(`Error al iniciar la cámara: ${err.name}. Asegúrate de haber dado permisos y de estar en un sitio HTTPS.`);
-                stopScanner(); // Revierte el estado si falla el inicio
-            }
+            errorLog.textContent = '';
+
+            codeReader.decodeFromVideoDevice(undefined, 'scanner-video', (result, err) => {
+                if (result) {
+                    addProductCode(result.getText());
+                }
+                if (err && !(err instanceof ZXing.NotFoundException)) {
+                    console.error("Error durante el escaneo:", err);
+                    stopScanner();
+                }
+            }).catch(err => {
+                console.error("Error al iniciar la cámara:", err);
+                if (err.name === 'NotAllowedError') {
+                    errorLog.textContent = 'Permiso denegado. Revisa los permisos de la cámara en tu navegador.';
+                } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+                    errorLog.textContent = 'No se puede usar la cámara. ¿La está usando otra app?';
+                } else if (err.name === "NotFoundError") {
+                    errorLog.textContent = 'No se encontró una cámara en este dispositivo.';
+                } else {
+                    errorLog.textContent = `Error inesperado: ${err.name}`;
+                }
+                stopScanner();
+            });
         };
 
         const stopScanner = () => {
@@ -304,7 +407,7 @@
             scannerContainer.style.display = 'none';
             scanButton.textContent = 'Escanear con Cámara';
             if (codeReader) {
-                codeReader.reset(); // Detiene el escáner y libera la cámara
+                codeReader.reset();
             }
         };
 
